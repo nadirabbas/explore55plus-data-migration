@@ -33,18 +33,20 @@ const assetLinks = _.chain([
 
 const uploaded = {};
 
-assetLinks.forEach(async (link) => {
-  try {
-    const buffer = await fetch(link).then((res) => res.buffer());
-    const assetDocument = await client.assets.upload("image", buffer);
+(async () => {
+  for (const link of assetLinks) {
+    try {
+      const buffer = await fetch(link).then((res) => res.buffer());
+      const assetDocument = await client.assets.upload("image", buffer);
 
-    uploaded[link] = assetDocument._id;
-    fs.writeFile(
-      path.resolve(__dirname, "asset-map.json"),
-      JSON.stringify(uploaded, null, 2),
-      (err) => err && console.log("error writing", err)
-    );
-  } catch (err) {
-    console.log(err);
+      uploaded[link] = assetDocument._id;
+      fs.writeFile(
+        path.resolve(__dirname, "asset-map.json"),
+        JSON.stringify(uploaded, null, 2),
+        (err) => err && console.log("error writing", err)
+      );
+    } catch (err) {
+      console.log(err);
+    }
   }
-});
+})();
