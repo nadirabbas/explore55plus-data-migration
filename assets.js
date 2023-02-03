@@ -12,16 +12,17 @@ const fs = require("fs");
 const path = require("path");
 
 const assetLinks = _.chain([
-  postHtmlAssets,
-  areas.map((a) => a.images),
+  // postHtmlAssets,
+  // areas.map((a) => a.images),
   communities.map((c) => [
-    c.amenityImages.map((i) => i.image),
-    c.financialImage1,
-    c.financialImage2,
-    c.imageGallery,
+    // c.amenityImages.map((i) => i.image),
+    // c.financialImage1,
+    // c.financialImage2,
+    // c.imageGallery,
+    c.heroImage,
   ]),
-  posts.map((p) => p.heroImage),
-  communityHtmlAssets,
+  // posts.map((p) => p.heroImage),
+  // communityHtmlAssets,
 ])
   .flattenDeep()
   .filter()

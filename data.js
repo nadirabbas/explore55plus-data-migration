@@ -4,6 +4,7 @@ const jsdom = require("jsdom");
 const { JSDOM } = jsdom;
 global.DOMParser = new JSDOM().window.DOMParser;
 const _ = require("lodash");
+const assets = require("./asset-map.json");
 
 const defaultSchema = Schema.compile({
   name: "myBlog",
@@ -37,15 +38,21 @@ const blockContentType = defaultSchema
   .get("blogPost")
   .fields.find((field) => field.name === "body").type;
 
+const getAsset = (src) => ({
+  _type: "reference",
+  _ref: assets[src],
+});
+
 const parseHtml = (html) =>
   htmlToBlocks(html || "", blockContentType, {
     rules: [
       {
         deserialize(el, next, block) {
           if (el.tagName !== "IMG") return undefined;
+
           return block({
-            _type: "code",
-            text: el.getAttribute("src"),
+            _type: "image",
+            asset: getAsset(el.getAttribute("src")),
           });
         },
       },
@@ -200,25 +207,28 @@ const communities = getPostsByType("community_finder").map((community) => {
     const answer = g(`faq_answer_${index}`);
 
     faq.push({
+      _type: "faq",
       question,
       answer,
     });
   }
 
   return {
+    _id: "co" + community.ID,
+    _type: "community",
     title: community.post_title,
-    slug: community.post_name,
+    slug: slugify(community.post_name),
     showAdditionalDetails: !!g("communities_new_template") || false,
     heroImage: heroImageMetaId ? gi(heroImageMetaId) : null,
     description: parseHtml(g("community_description")),
     excerpt: g("community_excerpt"),
-    state: 1,
+    state: ref("s1", "state"),
     hasNewBuilds: g("home_types") === "new_build",
     yearBuilt: yearBuilt ? parseInt(yearBuilt) : null,
     yearCompleted: yearCompleted ? parseInt(yearCompleted) : null,
     numberOfHomes: numberOfHomes ? parseInt(numberOfHomes) : null,
     externalVideo: communityVideo ? saveExternalVideo(communityVideo) : null,
-    area: ga(g("area").split('"')[1]),
+    area: ref(ga(g("area").split('"')[1]), "area"),
     closestMedical: closestMedical ? parseInt(closestMedical) : null,
     closestAirport: closestAirport ? parseInt(closestAirport) : null,
     closestGrocery: closestGrocery ? parseInt(closestGrocery) : null,
@@ -226,7 +236,8 @@ const communities = getPostsByType("community_finder").map((community) => {
       g("community_activities")
         ?.match(/"(.*?)"/g)
         ?.map((i) => gm(parseInt(i.replaceAll('"', ""))))
-        .filter((i) => i) || [],
+        .filter((i) => i)
+        .map((i) => ref(i, "amenity")) || [],
     amenityImages,
     amenityVideos,
     financialImage1: gi(g("financial_image_1")),
@@ -316,7 +327,7 @@ const postHtmlAssets = getTable("wp_mw19wgmlld_posts")
   .filter((arr) => arr && arr.length);
 
 const communityHtmlAssets = getTable("wp_mw19wgmlld_posts")
-  .filter(({ ID }) => communities.find(({ _id }) => _id == "c" + ID))
+  .filter(({ ID }) => communities.find(({ _id }) => _id == "co" + ID))
   .filter((p) => p.post_content)
   .map((p) => p.post_content.match(/src="(.*?)"/g))
   .filter((arr) => arr && arr.length);
@@ -331,4 +342,5 @@ module.exports = {
   externalVideos,
   postHtmlAssets,
   communityHtmlAssets,
+  getAsset,
 };
