@@ -12,6 +12,7 @@ const fs = require("fs");
 const path = require("path");
 
 const assetLinks = _.chain([
+  postHtmlAssets,
   areas.map((a) => a.images),
   communities.map((c) => [
     c.amenityImages.map((i) => i.image),
@@ -19,14 +20,16 @@ const assetLinks = _.chain([
     c.financialImage2,
     c.imageGallery,
   ]),
-  postHtmlAssets,
   posts.map((p) => p.heroImage),
   communityHtmlAssets,
 ])
   .flattenDeep()
   .filter()
   .uniq()
-  .value();
+  .value()
+  .map((link) =>
+    link.startsWith("src") ? link.replace(/src="|"/g, "") : link
+  );
 
 const uploaded = {};
 
