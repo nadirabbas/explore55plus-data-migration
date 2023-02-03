@@ -1,3 +1,57 @@
+const { htmlToBlocks } = require("@sanity/block-tools");
+const Schema = require("@sanity/schema");
+const jsdom = require("jsdom");
+const { JSDOM } = jsdom;
+global.DOMParser = new JSDOM().window.DOMParser;
+const _ = require("lodash");
+
+const defaultSchema = Schema.compile({
+  name: "myBlog",
+  types: [
+    {
+      type: "object",
+      name: "blogPost",
+      fields: [
+        {
+          title: "Title",
+          type: "string",
+          name: "title",
+        },
+        {
+          title: "Body",
+          name: "body",
+          type: "array",
+          of: [
+            {
+              type: "block",
+            },
+            { type: "image" },
+          ],
+        },
+      ],
+    },
+  ],
+});
+
+const blockContentType = defaultSchema
+  .get("blogPost")
+  .fields.find((field) => field.name === "body").type;
+
+const parseHtml = (html) =>
+  htmlToBlocks(html || "", blockContentType, {
+    rules: [
+      {
+        deserialize(el, next, block) {
+          if (el.tagName !== "IMG") return undefined;
+          return block({
+            _type: "code",
+            text: el.getAttribute("src"),
+          });
+        },
+      },
+    ],
+  });
+
 const tables = require("./dump.json").filter(({ type }) => type === "table");
 
 const getTable = (name) => tables.find(({ name: n }) => n === name)?.data;
@@ -14,6 +68,15 @@ const getPostMetaByPostId = (postId, key = null) =>
       post_id === postId && (key ? meta_key === key : true)
   );
 
+const slugify = (str) => ({
+  _type: "slug",
+  current: str,
+});
+
+const ref = (id, type) => ({ _type: "reference", _ref: id });
+const refs = (ids, type, key) =>
+  ids.map((id) => ({ ...ref(id, type), _key: key + id }));
+
 const getPostMetaByMetaId = (id) =>
   getTable("wp_mw19wgmlld_postmeta").find(({ meta_id }) => meta_id === id);
 
@@ -23,23 +86,25 @@ const saveExternalVideo = (video, caption = null) => {
   const existingVideo = externalVideos.find(({ link }) => link === video);
 
   if (existingVideo) {
-    return existingVideo.id;
+    return existingVideo._id;
   }
 
-  const id = externalVideos.length + 1;
+  const _id = "ev" + (externalVideos.length + 1);
 
   externalVideos.push({
-    id,
+    _id,
+    _type: "externalVideo",
     link: video,
     caption,
   });
 
-  return id;
+  return _id;
 };
 
 const states = [
   {
-    id: 1,
+    _id: "s1",
+    _type: "state",
     abbreviation: "FL",
     name: "Florida",
   },
@@ -47,30 +112,30 @@ const states = [
 
 const areas = getPostsByType("areas").map((area, i) => {
   return {
-    id: i + 1,
+    _id: area.ID,
+    _type: "area",
     name: area.post_title,
-    slug: area.post_name,
+    slug: slugify(area.post_name),
     excerpt: "",
     overview: "",
-    state: 1,
+    state: { _type: "reference", _ref: "s1" },
     images: [],
-    old_id: area.ID,
   };
 });
 
 const amenities = getPostsByType("activities").map((amenity, i) => {
   return {
-    id: i + 1,
+    _id: "a" + amenity.ID,
+    _type: "amenity",
     name: amenity.post_title.split(" ").slice(0, -1).join(" "),
-    slug: amenity.post_name.split("-").slice(0, -1).join("-"),
-    old_id: amenity.ID,
+    slug: slugify(amenity.post_name.split("-").slice(0, -1).join("-")),
   };
 });
 
 const funcs = (id) => [
   (key) => getPostMetaByPostId(id, key)?.meta_value,
   (oid) => areas.find(({ old_id }) => old_id == oid)?.id,
-  (oid) => amenities.find(({ old_id }) => old_id == oid)?.id,
+  (oid) => amenities.find(({ _id }) => _id == "a" + oid)?._id,
   (id) => getPostById(id)?.guid,
 ];
 
@@ -145,7 +210,7 @@ const communities = getPostsByType("community_finder").map((community) => {
     slug: community.post_name,
     showAdditionalDetails: !!g("communities_new_template") || false,
     heroImage: heroImageMetaId ? gi(heroImageMetaId) : null,
-    description: g("community_description"),
+    description: parseHtml(g("community_description")),
     excerpt: g("community_excerpt"),
     state: 1,
     hasNewBuilds: g("home_types") === "new_build",
@@ -200,13 +265,14 @@ const categoryTaxIds = categoryTax.map(
 const categories = getTable("wp_mw19wgmlld_terms")
   .filter(({ term_id }) => categoryTermIds.includes(term_id))
   .map((category, i) => ({
-    id: i + 1,
+    _id:
+      "c" +
+      categoryTax.find(({ term_id }) => term_id == category.term_id)
+        ?.term_taxonomy_id,
+    _type: "category",
     name: category.name,
-    slug: category.slug,
-    parentCategory: null,
+    slug: slugify(category.slug),
     description: null,
-    taxId: categoryTax.find(({ term_id }) => term_id == category.term_id)
-      ?.term_taxonomy_id,
   }));
 
 const postCategoryRelationships = getTable(
@@ -222,21 +288,38 @@ const posts = getPostsByType("post").map((post) => {
       .filter((r) => r.object_id == id)
       .map(
         ({ term_taxonomy_id }) =>
-          categories.find((c) => c.taxId == term_taxonomy_id)?.id
+          categories.find((c) => c._id == "c" + term_taxonomy_id)?._id
       )
       .filter((i) => i);
 
   return {
+    _id: "p" + post.ID,
+    _type: "post",
     title: post.post_title,
-    slug: post.post_name,
-    body: post.post_content,
-    excerpt: post.post_excerpt,
+    slug: slugify(post.post_name),
+    body: parseHtml(post.post_content),
     heroImage: gi(g("post_hero_image")),
-    categories: gr(post.ID),
+    categories: refs(gr(post.ID), "category", "cp"),
     readingTime: readTime ? parseInt(readTime) : null,
-    externalVideo: saveExternalVideo(g("external_url")),
+    externalVideo: refs(
+      [saveExternalVideo(g("external_url"))],
+      "externalVideo",
+      "evp"
+    ),
   };
 });
+
+const postHtmlAssets = getTable("wp_mw19wgmlld_posts")
+  .filter(({ ID }) => posts.find(({ _id }) => _id == "p" + ID))
+  .filter((p) => p.post_content)
+  .map((p) => p.post_content.match(/src="(.*?)"/g))
+  .filter((arr) => arr && arr.length);
+
+const communityHtmlAssets = getTable("wp_mw19wgmlld_posts")
+  .filter(({ ID }) => communities.find(({ _id }) => _id == "c" + ID))
+  .filter((p) => p.post_content)
+  .map((p) => p.post_content.match(/src="(.*?)"/g))
+  .filter((arr) => arr && arr.length);
 
 module.exports = {
   states,
@@ -246,4 +329,6 @@ module.exports = {
   categories,
   posts,
   externalVideos,
+  postHtmlAssets,
+  communityHtmlAssets,
 };
