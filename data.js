@@ -208,6 +208,7 @@ const communities = getPostsByType("community_finder").map((community) => {
 
     faq.push({
       _type: "faq",
+      _key: `faq_${community.ID}_${index}`,
       question,
       answer,
     });
@@ -227,19 +228,23 @@ const communities = getPostsByType("community_finder").map((community) => {
     yearBuilt: yearBuilt ? parseInt(yearBuilt) : null,
     yearCompleted: yearCompleted ? parseInt(yearCompleted) : null,
     numberOfHomes: numberOfHomes ? parseInt(numberOfHomes) : null,
-    externalVideo: communityVideo ? saveExternalVideo(communityVideo) : null,
+    externalVideo: communityVideo
+      ? ref(saveExternalVideo(communityVideo), "externalVideo")
+      : null,
     area: ref(ga(g("area").split('"')[1]), "area"),
     closestMedical: closestMedical ? parseInt(closestMedical) : null,
     closestAirport: closestAirport ? parseInt(closestAirport) : null,
     closestGrocery: closestGrocery ? parseInt(closestGrocery) : null,
-    amenities:
+    amenities: refs(
       g("community_activities")
         ?.match(/"(.*?)"/g)
         ?.map((i) => gm(parseInt(i.replaceAll('"', ""))))
-        .filter((i) => i)
-        .map((i) => ref(i, "amenity")) || [],
+        .filter((i) => i) || [],
+      "amenity",
+      "amc" + community.ID
+    ),
     amenityImages,
-    amenityVideos,
+    amenityVideos: refs(amenityVideos, "externalVideo", `amv${community.ID}`),
     financialImage1: gi(g("financial_image_1")),
     financialImage2: gi(g("financial_image_2")),
     averageHomePrice: averageHomePrice ? parseFloat(averageHomePrice) : null,
@@ -259,7 +264,14 @@ const communities = getPostsByType("community_finder").map((community) => {
       : null,
     gallerHeading: g("six_pack_heading"),
     gallerySupportingCopy: g("six_pack_copy"),
-    imageGallery,
+    imageGallery: {
+      _type: "gallery",
+      images: imageGallery.map((i, idx) => ({
+        _key: `cog${community.ID}${idx}`,
+        _type: "img",
+        asset: getAsset(i),
+      })),
+    },
     faq,
   };
 });
