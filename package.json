@@ -8,6 +8,7 @@
     "@sanity/client": "^4.0.1",
     "@sanity/schema": "^3.2.6",
     "case": "^1.6.3",
+    "collect.js": "^4.34.3",
     "dotenv": "^16.0.3",
     "jsdom": "^21.1.0",
     "lodash": "^4.17.21",

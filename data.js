@@ -119,7 +119,7 @@ const states = [
 
 const areas = getPostsByType("areas").map((area, i) => {
   return {
-    _id: area.ID,
+    _id: "ar" + area.ID,
     _type: "area",
     name: area.post_title,
     slug: slugify(area.post_name),
@@ -141,7 +141,7 @@ const amenities = getPostsByType("activities").map((amenity, i) => {
 
 const funcs = (id) => [
   (key) => getPostMetaByPostId(id, key)?.meta_value,
-  (oid) => areas.find(({ old_id }) => old_id == oid)?.id,
+  (oid) => areas.find(({ _id }) => _id == "ar" + oid)?._id,
   (oid) => amenities.find(({ _id }) => _id == "a" + oid)?._id,
   (id) => getPostById(id)?.guid,
 ];
