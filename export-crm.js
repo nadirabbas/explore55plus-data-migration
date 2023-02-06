@@ -113,6 +113,7 @@ const leads = leadIds.map((id) => {
   if (leadAreas.length > 3) ll("> 3 areas", mm("hash_id"));
 
   return {
+    id: id,
     transaction_type: mm("transaction"),
 
     purchase_journey: null,
@@ -166,7 +167,7 @@ const leads = leadIds.map((id) => {
   };
 });
 
-const create = async () => {
+const createAgents = async () => {
   const { db, User, UserDetail } = require("./db");
 
   const t = await db.transaction();
@@ -180,6 +181,7 @@ const create = async () => {
       {
         ...agent.details,
         user_id: user.id,
+        avatar: "/avatars/" + agent.details.avatar.split("/").pop(),
       },
       { transaction: t }
     );
@@ -188,6 +190,30 @@ const create = async () => {
   t.commit();
   db.close();
 };
+
+const createLeads = async () => {
+  const { db, Lead, LeadArea } = require("./db");
+
+  const t = await db.transaction();
+  db.query("DELETE FROM leads", { transaction: t });
+  for (lead of leads) {
+    const l = await Lead.create(lead, { transaction: t });
+    for (area of lead.areas) {
+      await LeadArea.create(
+        {
+          ...area,
+          lead_id: l.id,
+        },
+        { transaction: t }
+      );
+    }
+  }
+
+  t.commit();
+  db.close();
+};
+
+createLeads();
 
 module.exports = {
   agents,
