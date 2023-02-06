@@ -1,3 +1,4 @@
+const DEBUG = false;
 const {
   getTable,
   getPostsByType,
@@ -53,7 +54,6 @@ const agents = getPostsByType("agent_finder", true).map((agent) => {
       : agent.post_title,
     email: email,
     details: {
-      user_id: agent.ID,
       avatar: getPostById(pm("agent_avatar"))?.guid,
       bio: pm("agent_bio"),
       phone_number: pm("agent_phone"),
@@ -70,6 +70,10 @@ const agents = getPostsByType("agent_finder", true).map((agent) => {
 // const agentIdHashMap = _.keyBy(agents, "ID");
 const agentAreaHashMap = {};
 const unassignedAgentAreaLeadIds = [];
+
+const ll = (m, i) =>
+  DEBUG &&
+  console.log(m, `https://export55plus.com/basecamp/pipeline/lead/?id=${i}`);
 
 const leads = leadIds.map((id) => {
   const user = users[id];
@@ -105,6 +109,9 @@ const leads = leadIds.map((id) => {
     ]);
   }
 
+  if (agentIds.length > 3) ll("> 3 agents", mm("hash_id"));
+  if (leadAreas.length > 3) ll("> 3 areas", mm("hash_id"));
+
   return {
     transaction_type: mm("transaction"),
 
@@ -134,7 +141,10 @@ const leads = leadIds.map((id) => {
       }
       return {
         area_id: areaId,
-        user_id: agentIds.length === 1 ? agentIds[0] : areaToAgentHash[areaId],
+        user_id:
+          agentIds.length === 1
+            ? agentIds[0]
+            : areaToAgentHash[areaId] || collect(agentIds).random(),
         status,
       };
     }),
@@ -156,4 +166,29 @@ const leads = leadIds.map((id) => {
   };
 });
 
-console.log(leads.map((l) => l.notes));
+const create = async () => {
+  const { db, User, UserDetail } = require("./db");
+
+  const t = await db.transaction();
+  for (agent of agents) {
+    const user = await User.create(agent, { transaction: t });
+    await db.query(
+      `INSERT INTO model_has_roles (role_id, model_type, model_id) VALUES (4, 'App\\\\Models\\\\User', ${user.id})`,
+      { transaction: t }
+    );
+    await UserDetail.create(
+      {
+        ...agent.details,
+        user_id: user.id,
+      },
+      { transaction: t }
+    );
+  }
+
+  t.commit();
+  db.close();
+};
+
+module.exports = {
+  agents,
+};
