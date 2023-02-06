@@ -21,7 +21,8 @@ const avatars = _.flattenDeep([
 ]).map((img) => img.replace(/\.flywheelstaging|www\./g, ""));
 
 (async () => {
-  for (const link of avatars.slice(0, 1)) {
+  let i = 0;
+  for (const link of avatars) {
     fetch(link)
       .then((res) => res.buffer())
       .then((buffer) => {
@@ -33,14 +34,15 @@ const avatars = _.flattenDeep([
         client
           .send(command)
           .then((res) => {
-            console.log(res);
-            fs.writeFile(
-              path.resolve(__dirname, "asset-map.json"),
-              JSON.stringify(uploaded, null, 2),
-              (err) => err && console.log("error writing", err)
-            );
+            console.log(`Done ${i} / ${avatars.length}`);
           })
-          .catch((err) => console.log(link, "Error uploading", err));
+          .catch((err) => console.log(link, "Error uploading", err))
+          .finally(() => {
+            i++;
+          });
+      })
+      .finally(() => {
+        i++;
       });
   }
 })();
