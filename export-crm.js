@@ -1,4 +1,4 @@
-const DEBUG = false;
+const DEBUG = true;
 const {
   getTable,
   getPostsByType,
@@ -8,6 +8,7 @@ const {
 } = require("./helpers");
 const _ = require("lodash");
 const collect = require("collect.js");
+const { db } = require("./db");
 
 // convert users table to hashmap using lodash
 const users = _.keyBy(getTable("wp_mw19wgmlld_users"), "ID");
@@ -35,7 +36,7 @@ const statusMap = {
 const agentUserIdToPostHash = {};
 const agentPostIdToUserHash = {};
 
-const agents = getPostsByType("agent_finder", true).map((agent) => {
+let agents = getPostsByType("agent_finder", true).map((agent) => {
   const pm = (key) => getPostMetaByPostId(agent.ID, key)?.meta_value;
   const email = pm("agent_email").toLowerCase();
   const agentUser = usersByEmail[email];
@@ -49,6 +50,7 @@ const agents = getPostsByType("agent_finder", true).map((agent) => {
 
   return {
     id: agent.ID,
+    user_id: agentUser?.ID,
     name: agentUser
       ? mm("first_name") + " " + mm("last_name")
       : agent.post_title,
@@ -67,13 +69,34 @@ const agents = getPostsByType("agent_finder", true).map((agent) => {
   };
 });
 
-// const agentIdHashMap = _.keyBy(agents, "ID");
+const agentsUserIds = Object.keys(agentUserIdToPostHash);
+
+const adminIds = getTable("wp_mw19wgmlld_usermeta")
+  .filter(({ meta_key }) => meta_key === "notes")
+  .map(({ meta_value }) => meta_value.split("i:")[1].split(";")[0])
+  .filter((id) => !agentsUserIds.includes(id))
+  .reduce((acc, id) => (acc.includes(id) ? acc : [...acc, id]), []);
+
+const noteCreators = getTable("wp_mw19wgmlld_users")
+  .filter((user) => adminIds.includes(user.ID))
+  .map((user) => {
+    return {
+      id: (parseInt(user.ID) + 500).toString(),
+      name: user.display_name,
+      email: user.user_email,
+    };
+  });
+agents = agents.concat(noteCreators);
+
 const agentAreaHashMap = {};
 const unassignedAgentAreaLeadIds = [];
 
 const ll = (m, i) =>
   DEBUG &&
-  console.log(m, `https://export55plus.com/basecamp/pipeline/lead/?id=${i}`);
+  console.log(
+    m,
+    `https://explore55plus.flywheelstaging.com/basecamp/pipeline/lead/?id=${i}`
+  );
 
 const leads = leadIds.map((id) => {
   const user = users[id];
@@ -87,7 +110,9 @@ const leads = leadIds.map((id) => {
   const budget = mm("budget");
   const status = statusMap[mm("status")];
 
-  const agentIds = extractIds(mm("agent_id"));
+  const agentIds = extractIds(mm("agent_id")).filter((id) =>
+    agentPostIdToUserHash.hasOwnProperty(id)
+  );
 
   // agentId => [assigned area ids]
   agentIds.forEach(
@@ -100,7 +125,7 @@ const leads = leadIds.map((id) => {
 
   const leadAreas = extractIds(mm("area"));
 
-  let areaToAgentHash = null;
+  let areaToAgentHash = {};
 
   if (agentIds.length > 1) {
     areaToAgentHash = collect(leadAreas).mapWithKeys((areaId) => [
@@ -111,6 +136,8 @@ const leads = leadIds.map((id) => {
 
   if (agentIds.length > 3) ll("> 3 agents", mm("hash_id"));
   if (leadAreas.length > 3) ll("> 3 areas", mm("hash_id"));
+  if (agentIds.length === 0)
+    ll("agents found, but cpt dont exist", mm("hash_id"));
 
   return {
     id: id,
@@ -134,18 +161,25 @@ const leads = leadIds.map((id) => {
 
     purchase_build_type: mm("build"),
     last_updated: mm("last_updated"),
+    created_at: user.user_registered,
+    agentIds,
 
     areas: leadAreas.map((areaId) => {
       // non of the multiple agents assigned to the lead are directly assigned to the area
       if (agentIds.length > 1 && !areaToAgentHash[areaId]) {
         unassignedAgentAreaLeadIds.push(id);
       }
+
+      const agentId =
+        agentIds.length === 1
+          ? agentIds[0]
+          : areaToAgentHash[areaId] || collect(agentIds).random();
+
+      if (agentId == "1516") console.log(agentIds);
+
       return {
         area_id: areaId,
-        user_id:
-          agentIds.length === 1
-            ? agentIds[0]
-            : areaToAgentHash[areaId] || collect(agentIds).random(),
+        user_id: agentId,
         status,
       };
     }),
@@ -167,34 +201,54 @@ const leads = leadIds.map((id) => {
   };
 });
 
-const createAgents = async () => {
-  const { db, User, UserDetail } = require("./db");
+let cidToAid = {};
 
-  const t = await db.transaction();
+const createAgents = async (t) => {
+  const { db, User, UserDetail, AreaUser } = require("./db");
+
+  cidToAid = _.keyBy(
+    await db.query(`SELECT * FROM areas`, {
+      type: db.QueryTypes.SELECT,
+    }),
+    "content_foreign_id"
+  );
+
   for (agent of agents) {
     const user = await User.create(agent, { transaction: t });
     await db.query(
-      `INSERT INTO model_has_roles (role_id, model_type, model_id) VALUES (4, 'App\\\\Models\\\\User', ${user.id})`,
+      `INSERT INTO model_has_roles (role_id, model_type, model_id) VALUES (${
+        adminIds.includes(agent.id) ? "4" : "4"
+      }, 'App\\\\Models\\\\User', ${user.id})`,
       { transaction: t }
     );
-    await UserDetail.create(
-      {
-        ...agent.details,
-        user_id: user.id,
-        avatar: "/avatars/" + agent.details.avatar.split("/").pop(),
-      },
-      { transaction: t }
-    );
-  }
 
-  t.commit();
-  db.close();
+    if (agent.details)
+      await UserDetail.create(
+        {
+          ...agent.details,
+          user_id: user.id,
+          avatar: "avatars/" + agent.details.avatar.split("/").pop(),
+        },
+        { transaction: t }
+      );
+
+    if (agentAreaHashMap[agent.id]) {
+      for (area of agentAreaHashMap[agent.id]) {
+        await AreaUser.create(
+          {
+            area_id: cidToAid[`ar${area}`].id,
+            user_id: user.id,
+          },
+          { transaction: t }
+        );
+      }
+    }
+  }
 };
 
-const createLeads = async () => {
-  const { db, Lead, LeadArea } = require("./db");
+const createLeads = async (t) => {
+  const { db, Lead, LeadArea, Note, LeadActivity } = require("./db");
 
-  const t = await db.transaction();
   db.query("DELETE FROM leads", { transaction: t });
   for (lead of leads) {
     const l = await Lead.create(lead, { transaction: t });
@@ -202,18 +256,57 @@ const createLeads = async () => {
       await LeadArea.create(
         {
           ...area,
+          area_id: cidToAid[`ar${area.area_id}`].id,
+          user_id: area.user_id,
           lead_id: l.id,
         },
         { transaction: t }
       );
     }
-  }
 
-  t.commit();
-  db.close();
+    for (note of lead.notes) {
+      const userId = parseInt(note.user_id)
+        ? adminIds.includes(note.user_id)
+          ? (parseInt(note.user_id) + 500).toString()
+          : agentUserIdToPostHash[note.user_id]
+        : collect(lead.agentIds).random().toString();
+
+      await Note.create(
+        {
+          ...note,
+          user_id: userId,
+          lead_id: l.id,
+        },
+        { transaction: t }
+      );
+      await LeadActivity.create(
+        {
+          lead_id: l.id,
+          user_id: userId,
+          category: "notes",
+          description: "add a new note",
+          html: note.description,
+          created_at: note.created_at,
+        },
+        { transaction: t }
+      );
+    }
+  }
 };
 
-createLeads();
+(async () => {
+  const t = await db.transaction();
+  try {
+    await createAgents(t);
+    await createLeads(t);
+  } catch (error) {
+    console.error(error);
+  }
+  await t.commit();
+  // await t.rollback();
+  await t.can;
+  await db.close();
+})();
 
 module.exports = {
   agents,

@@ -2,6 +2,7 @@ const { Sequelize, DataTypes: D } = require("sequelize");
 const db = new Sequelize("explore", "root", null, {
   host: "localhost",
   dialect: "mysql",
+  logging: false,
 });
 
 const id = () => ({
@@ -10,10 +11,15 @@ const id = () => ({
 });
 
 const opts = (opts) => ({
-  createdAt: "created_at",
-  updatedAt: "updated_at",
+  createdAt: false,
+  updatedAt: false,
   ...opts,
 });
+
+const t = {
+  created_at: D.DATE,
+  updated_at: D.DATE,
+};
 
 const User = db.define(
   "user",
@@ -24,6 +30,7 @@ const User = db.define(
       type: D.STRING,
       unique: true,
     },
+    ...t,
   },
   opts()
 );
@@ -45,6 +52,7 @@ const UserDetail = db.define(
     is_active: D.BOOLEAN,
     welcome_email_subject: D.STRING,
     welcome_email_body: D.TEXT,
+    ...t,
   },
   opts()
 );
@@ -78,6 +86,7 @@ const Lead = db.define(
 
     purchase_build_type: D.STRING,
     last_updated: D.DATE,
+    ...t,
   },
   opts()
 );
@@ -105,6 +114,47 @@ const LeadArea = db.define(
     review_link_rejection_reason: D.STRING,
     is_review_link_sent: D.BOOLEAN,
     assigned_at: D.DATE,
+    ...t,
+  },
+  opts()
+);
+
+const AreaUser = db.define(
+  "area_user",
+  {
+    id: id(),
+    user_id: D.BIGINT,
+    area_id: D.BIGINT,
+    ...t,
+  },
+  opts({
+    tableName: "area_user",
+  })
+);
+
+const Note = db.define(
+  "note",
+  {
+    id: id(),
+    lead_id: D.BIGINT,
+    user_id: D.BIGINT,
+    description: D.TEXT,
+    ...t,
+  },
+  opts()
+);
+
+const LeadActivity = db.define(
+  "lead_activity",
+  {
+    id: id(),
+    lead_id: D.BIGINT,
+    user_id: D.BIGINT,
+    category: D.STRING,
+    description: D.TEXT,
+    data: D.TEXT,
+    html: D.TEXT,
+    ...t,
   },
   opts()
 );
@@ -115,4 +165,7 @@ module.exports = {
   UserDetail,
   Lead,
   LeadArea,
+  AreaUser,
+  Note,
+  LeadActivity,
 };

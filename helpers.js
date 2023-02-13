@@ -8,10 +8,12 @@ const getPostsByType = (type, all = false) =>
   );
 const getPostById = (id) =>
   getTable("wp_mw19wgmlld_posts").find(({ ID }) => ID === id);
-const getPostMetaByPostId = (postId, key = null) =>
+const getPostMetaByPostId = (postId = null, key = null, value = null) =>
   getTable("wp_mw19wgmlld_postmeta").find(
     ({ post_id, meta_key }) =>
-      post_id === postId && (key ? meta_key === key : true)
+      (post_id ? post_id === postId : true) &&
+      (key ? meta_key === key : true) &&
+      (value ? meta_value.toLowerCase() === value.toLowerCase() : true)
   );
 
 const extractIds = (str) =>
