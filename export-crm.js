@@ -9,6 +9,7 @@ const {
 const _ = require("lodash");
 const collect = require("collect.js");
 const { db } = require("./db");
+const moment = require("moment");
 
 // convert users table to hashmap using lodash
 const users = _.keyBy(getTable("wp_mw19wgmlld_users"), "ID");
@@ -114,6 +115,7 @@ const leads = leadIds.map((id) => {
   const agentIds = extractIds(mm("agent_id")).filter((id) =>
     agentPostIdToUserHash.hasOwnProperty(id)
   );
+  const amenityIds = extractIds(mm("activities"));
 
   // agentId => [assigned area ids]
   agentIds.forEach(
@@ -170,6 +172,8 @@ const leads = leadIds.map((id) => {
     manual_entry: "manual_other",
   }[mm("source")];
 
+  const finalAmount = mm("final_amount");
+
   return {
     id: id,
     transaction_type: transactionType,
@@ -195,6 +199,8 @@ const leads = leadIds.map((id) => {
     created_at: user.user_registered,
     agentIds,
 
+    amenityIds,
+
     areas: leadAreas.map((areaId) => {
       // non of the multiple agents assigned to the lead are directly assigned to the area
       if (agentIds.length > 1 && !areaToAgentHash[areaId]) {
@@ -206,12 +212,16 @@ const leads = leadIds.map((id) => {
           ? agentIds[0]
           : areaToAgentHash[areaId] || collect(agentIds).random();
 
-      if (agentId == "1516") console.log(agentIds);
+      const isDead = ["pending", "closed"].includes(status);
 
       return {
         area_id: areaId,
         user_id: agentId,
         status,
+        estimated_closing_date: isDead ? mm("est_closing") : null,
+        closing_date: status === "closed" ? mm("actual_closing") : null,
+        final_amount:
+          finalAmount && status === "closed" ? parseFloat(finalAmount) : null,
       };
     }),
     notes: notes.map((note) => {
@@ -276,7 +286,15 @@ const createAgents = async (t) => {
 };
 
 const createLeads = async (t) => {
-  const { db, Lead, LeadArea, Note, LeadActivity } = require("./db");
+  const {
+    db,
+    Lead,
+    LeadArea,
+    Note,
+    LeadActivity,
+    LeadCampaign,
+    LeadAmenity,
+  } = require("./db");
 
   db.query("DELETE FROM leads", { transaction: t });
   const admin = await db.query(
@@ -284,6 +302,12 @@ const createLeads = async (t) => {
     {
       type: db.QueryTypes.SELECT,
     }
+  );
+  const amenities = _.keyBy(
+    await db.query("SELECT * FROM amenities", {
+      type: db.QueryTypes.SELECT,
+    }),
+    "content_foreign_id"
   );
 
   for (lead of leads) {
@@ -295,6 +319,18 @@ const createLeads = async (t) => {
           area_id: cidToAid[`ar${area.area_id}`].id,
           user_id: area.user_id,
           lead_id: l.id,
+        },
+        { transaction: t }
+      );
+    }
+
+    for (id of lead.amenityIds) {
+      const amenityId = amenities[`a${id}`]?.id;
+      if (!amenityId) continue;
+      await LeadAmenity.create(
+        {
+          lead_id: l.id,
+          amenity_id: amenityId,
         },
         { transaction: t }
       );
@@ -326,6 +362,52 @@ const createLeads = async (t) => {
           description: "add a new note",
           html: note.description,
           created_at: note.created_at,
+        },
+        { transaction: t }
+      );
+    }
+
+    const daysDiff = moment().diff(moment(lead.created_at), "days");
+
+    const isClosed = lead.areas.findIndex((a) => a.status === "closed");
+    const isLost = lead.areas.findIndex((a) => a.status === "lost");
+
+    const isDead = !lead.areas.length || isClosed > -1 || isLost > -1;
+
+    if (daysDiff >= 2 && daysDiff < 25 && !isDead) {
+      await LeadCampaign.create(
+        {
+          lead_id: l.id,
+          code: "2day",
+          created_at: moment(lead.created_at)
+            .add(1, "days")
+            .format("YYYY-MM-DD HH:mm:ss"),
+        },
+        { transaction: t }
+      );
+    }
+
+    if (daysDiff >= 25 && !isDead) {
+      await LeadCampaign.create(
+        {
+          lead_id: l.id,
+          code: "25day",
+          created_at: moment(lead.created_at)
+            .add(25, "days")
+            .format("YYYY-MM-DD HH:mm:ss"),
+        },
+        { transaction: t }
+      );
+    }
+
+    if (isClosed > -1) {
+      await LeadCampaign.create(
+        {
+          lead_id: l.id,
+          code: "postclosing",
+          created_at: moment(lead.areas[isClosed].closing_date).format(
+            "YYYY-MM-DD"
+          ),
         },
         { transaction: t }
       );

@@ -173,6 +173,30 @@ const LeadActivity = db.define(
   opts()
 );
 
+const LeadCampaign = db.define(
+  "lead_campaign",
+  {
+    id: id(),
+    lead_id: D.BIGINT,
+    code: D.STRING,
+    ...t,
+  },
+  opts()
+);
+
+const LeadAmenity = db.define(
+  "lead_amenity",
+  {
+    id: id(),
+    lead_id: D.BIGINT,
+    amenity_id: D.BIGINT,
+    ...t,
+  },
+  opts({
+    tableName: "amenity_lead",
+  })
+);
+
 module.exports = {
   db,
   User,
@@ -182,4 +206,6 @@ module.exports = {
   AreaUser,
   Note,
   LeadActivity,
+  LeadCampaign,
+  LeadAmenity,
 };
