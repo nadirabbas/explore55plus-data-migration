@@ -1,6 +1,20 @@
 const { Sequelize, DataTypes: D } = require("sequelize");
-const db = new Sequelize("explore", "root", null, {
+
+// let details = {
+//   user: "vapor",
+//   db: "vapor",
+//   password: "JIc3vmTFeQsqLVZifsbevPF8taDTOqj3TJe4MGnW",
+//   host: "staging.ciaqw6leg4ng.us-east-1.rds.amazonaws.com",
+// };
+let details = {
+  user: "root",
+  db: "explore",
+  password: null,
   host: "localhost",
+};
+
+const db = new Sequelize(details.db, details.user, details.password, {
+  host: details.host,
   dialect: "mysql",
   logging: false,
 });

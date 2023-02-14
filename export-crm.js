@@ -86,7 +86,8 @@ const noteCreators = getTable("wp_mw19wgmlld_users")
       email: user.user_email,
     };
   });
-agents = agents.concat(noteCreators);
+
+// agents = agents.concat(noteCreators);
 
 const agentAreaHashMap = {};
 const unassignedAgentAreaLeadIds = [];
@@ -139,27 +140,57 @@ const leads = leadIds.map((id) => {
   if (agentIds.length === 0)
     ll("agents found, but cpt dont exist", mm("hash_id"));
 
+  const phone = mm("phone")?.replace(/ |\(|\)|-|\+|\./g, "");
+  const transactionType = {
+    buying: "purchase",
+    selling: "sale",
+  }[mm("transaction")];
+  const purchaseTimeline = {
+    "1-year": "year",
+    "6-months": "half_year",
+    "not-sure": null,
+    "right-now": "now",
+  }[mm("timing")];
+  const propertyType = {
+    condo: "condo",
+    "single family": "single_family",
+    townhouse: "townhouse",
+    "villa duplex": "duplex",
+    villaduplex: "duplex",
+  }[mm("property")];
+  const buildType = {
+    either: "either",
+    "new construction": "new",
+    resale: "resale",
+  }[mm("build")];
+
+  const source = {
+    form: "primary_flow",
+    manual: "manual_other",
+    manual_entry: "manual_other",
+  }[mm("source")];
+
   return {
     id: id,
-    transaction_type: mm("transaction"),
+    transaction_type: transactionType,
 
     purchase_journey: null,
-    purchase_timeline: mm("timing"),
-    purchase_property_type: mm("property"),
+    purchase_timeline: purchaseTimeline,
+    purchase_property_type: propertyType,
     purchase_min_budget: 0,
     purchase_max_budget: budget ? parseFloat(budget) : null,
 
-    first_name: mm("first_name"),
+    first_name: mm("first_name").replaceAll("&amp;", "&"),
     last_name: mm("last_name"),
-    phone: mm("phone"),
+    phone: phone?.length <= 11 ? phone : null,
     zip: mm("zipcode"),
     email: user.user_email,
     secondary_email: mm("secondary_email"),
     birthdate: null,
     additional_details: null,
-    source: mm("source"),
+    source: source,
 
-    purchase_build_type: mm("build"),
+    purchase_build_type: buildType,
     last_updated: mm("last_updated"),
     created_at: user.user_registered,
     agentIds,
@@ -190,10 +221,10 @@ const leads = leadIds.map((id) => {
         .split(`"`)[0];
       const description = note.meta_value
         .split(/note";s:[0-9]+:"/g)[1]
-        .split(`"`)[0];
+        .split(`";}`)[0];
 
       return {
-        user_id: addedBy,
+        user_id: agentUserIdToPostHash.hasOwnProperty(addedBy) ? addedBy : null,
         description,
         created_at: timestamp,
       };
@@ -216,9 +247,7 @@ const createAgents = async (t) => {
   for (agent of agents) {
     const user = await User.create(agent, { transaction: t });
     await db.query(
-      `INSERT INTO model_has_roles (role_id, model_type, model_id) VALUES (${
-        adminIds.includes(agent.id) ? "4" : "4"
-      }, 'App\\\\Models\\\\User', ${user.id})`,
+      `INSERT INTO model_has_roles (role_id, model_type, model_id) VALUES (4, 'App\\\\Models\\\\User', ${user.id})`,
       { transaction: t }
     );
 
@@ -250,6 +279,13 @@ const createLeads = async (t) => {
   const { db, Lead, LeadArea, Note, LeadActivity } = require("./db");
 
   db.query("DELETE FROM leads", { transaction: t });
+  const admin = await db.query(
+    "SELECT * FROM users WHERE email = 'paul@explore55plus.com'",
+    {
+      type: db.QueryTypes.SELECT,
+    }
+  );
+
   for (lead of leads) {
     const l = await Lead.create(lead, { transaction: t });
     for (area of lead.areas) {
@@ -265,11 +301,14 @@ const createLeads = async (t) => {
     }
 
     for (note of lead.notes) {
-      const userId = parseInt(note.user_id)
-        ? adminIds.includes(note.user_id)
-          ? (parseInt(note.user_id) + 500).toString()
-          : agentUserIdToPostHash[note.user_id]
-        : collect(lead.agentIds).random().toString();
+      const userId = note.user_id
+        ? agentUserIdToPostHash[note.user_id]
+        : admin[0].id;
+      // const userId = parseInt(note.user_id)
+      //   ? adminIds.includes(note.user_id)
+      //     ? (parseInt(note.user_id) + 500).toString()
+      //     : agentUserIdToPostHash[note.user_id]
+      //   : collect(lead.agentIds).random().toString();
 
       await Note.create(
         {
@@ -282,7 +321,7 @@ const createLeads = async (t) => {
       await LeadActivity.create(
         {
           lead_id: l.id,
-          user_id: userId,
+          user_id: agentUserIdToPostHash[note.user_id] || null,
           category: "notes",
           description: "add a new note",
           html: note.description,
