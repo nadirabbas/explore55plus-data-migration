@@ -1,16 +1,11 @@
+require("dotenv").config();
 const { Sequelize, DataTypes: D } = require("sequelize");
 
-// let details = {
-//   user: "vapor",
-//   db: "vapor",
-//   password: "JIc3vmTFeQsqLVZifsbevPF8taDTOqj3TJe4MGnW",
-//   host: "staging.ciaqw6leg4ng.us-east-1.rds.amazonaws.com",
-// };
 let details = {
-  user: "root",
-  db: "explore",
-  password: null,
-  host: "localhost",
+  user: process.env.DB_USER || "root",
+  db: process.env.DB_NAME || "explore",
+  password: process.env.DB_PASSWORD || null,
+  host: process.env.DB_HOST || "localhost",
 };
 
 const db = new Sequelize(details.db, details.user, details.password, {
