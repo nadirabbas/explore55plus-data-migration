@@ -57,11 +57,11 @@ let agents = getPostsByType("agent_finder", true).map((agent) => {
       : agent.post_title,
     email: email,
     details: {
-      avatar: null /*getPostById(pm("agent_avatar"))?.guid*/,
+      avatar: getPostById(pm("agent_avatar"))?.guid,
       bio: pm("agent_bio"),
       phone_number: pm("agent_phone"),
       work_email: email,
-      video: null /*pm("video_url")*/,
+      video: pm("video_url"),
       commission_percentage: null,
       is_active: agent.post_status === "publish",
       welcome_email_subject: pm("email_subject"),
