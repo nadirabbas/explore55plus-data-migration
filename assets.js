@@ -18,7 +18,7 @@ const assetLinks = _.chain([
     c.amenityImages.map((i) => i.image),
     c.financialImage1,
     c.financialImage2,
-    c.imageGallery,
+    c.imageGalleryAssets,
     c.heroImage,
   ]),
   posts.map((p) => p.heroImage),
@@ -28,31 +28,31 @@ const assetLinks = _.chain([
   .filter()
   .uniq()
   .value()
-  .map((link) =>
-    link.startsWith("src") ? link.replace(/src="|"/g, "") : link
-  );
+  .map((link) => {
+    return link.startsWith("src") ? link.replace(/src="|"/g, "") : link;
+  });
 
 const uploaded = {};
 const uploadCount = 0;
 
-(async () => {
-  for (const link of assetLinks) {
-    try {
-      const buffer = await fetch(link).then((res) => res.buffer());
-      const assetDocument = await client.assets.upload("image", buffer);
+// (async () => {
+//   for (const link of assetLinks) {
+//     try {
+//       const buffer = await fetch(link).then((res) => res.buffer());
+//       const assetDocument = await client.assets.upload("image", buffer);
 
-      uploadCount++;
+//       uploadCount++;
 
-      uploaded[link] = assetDocument._id;
-      fs.writeFile(
-        path.resolve(__dirname, "asset-map.json"),
-        JSON.stringify(uploaded, null, 2),
-        (err) => err && console.log("error writing", err)
-      );
+//       uploaded[link] = assetDocument._id;
+//       fs.writeFile(
+//         path.resolve(__dirname, "asset-map.json"),
+//         JSON.stringify(uploaded, null, 2),
+//         (err) => err && console.log("error writing", err)
+//       );
 
-      console.log(`Uploaded ${uploadCount} of ${assetLinks.length}`);
-    } catch (err) {
-      console.log(err);
-    }
-  }
-})();
+//       console.log(`Uploaded ${uploadCount} of ${assetLinks.length}`);
+//     } catch (err) {
+//       console.log(err);
+//     }
+//   }
+// })();

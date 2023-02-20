@@ -264,6 +264,7 @@ const communities = getPostsByType("community_finder").map((community) => {
       : null,
     gallerHeading: g("six_pack_heading"),
     gallerySupportingCopy: g("six_pack_copy"),
+    imageGalleryAssets: imageGallery,
     imageGallery: {
       _type: "gallery",
       images: imageGallery.map((i, idx) => ({
