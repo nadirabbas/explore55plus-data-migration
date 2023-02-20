@@ -35,8 +35,6 @@ const assetLinks = _.chain([
 const uploaded = {};
 const uploadCount = 0;
 
-console.log(assetLinks);
-
 (async () => {
   for (const link of assetLinks) {
     try {
