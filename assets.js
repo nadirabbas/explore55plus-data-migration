@@ -33,7 +33,7 @@ const assetLinks = _.chain([
   });
 
 const uploaded = {};
-const uploadCount = 0;
+let uploadCount = 0;
 
 (async () => {
   for (const link of assetLinks) {
